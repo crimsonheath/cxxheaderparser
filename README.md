@@ -1,6 +1,8 @@
 cxxheaderparser
 ===============
 
+**HEATH FORK: This fork adds support for Heath's internal reflection macros**
+
 A pure python C++ header parser that parses C++ headers in a mildly naive
 manner that allows it to handle many C++ constructs, including many modern
 (C++11 and beyond) features.

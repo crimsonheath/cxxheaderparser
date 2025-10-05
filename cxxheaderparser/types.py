@@ -20,6 +20,9 @@ class Value:
 
     def format(self) -> str:
         return tokfmt(self.tokens)
+    
+
+HReflType = typing.Dict[str, Value | None]
 
 
 @dataclass
@@ -446,6 +449,8 @@ class EnumDecl:
     #: If within a class, the access level for this decl
     access: typing.Optional[str] = None
 
+    hrefl: HReflType = None
+
 
 @dataclass
 class TemplateNonTypeParam:
@@ -656,6 +661,8 @@ class ClassDecl:
     #: If within a class, the access level for this decl
     access: typing.Optional[str] = None
 
+    hrefl: HReflType = None
+
     @property
     def classkey(self) -> typing.Optional[str]:
         return self.typename.classkey
@@ -749,6 +756,8 @@ class Function:
     #:
     #: template <typename T> int main() requires ...
     raw_requires: typing.Optional[Value] = None
+
+    hrefl: HReflType = None
 
 
 @dataclass
@@ -870,6 +879,8 @@ class Field:
     inline: bool = False
 
     doxygen: typing.Optional[str] = None
+
+    hrefl: HReflType = None
 
 
 @dataclass

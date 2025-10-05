@@ -34,6 +34,7 @@ from .types import (
     Function,
     FunctionType,
     FundamentalSpecifier,
+    HReflType,
     Method,
     MoveReference,
     NameSpecifier,
@@ -1101,6 +1102,7 @@ class CxxParser:
         is_typedef: bool,
         location: Location,
         mods: ParsedTypeModifiers,
+        hrefl: typing.Optional[HReflType] = None,
     ) -> None:
         """
         opaque_enum_declaration: enum_key [attribute_specifier_seq] IDENTIFIER [enum_base] ";"
@@ -1147,11 +1149,11 @@ class CxxParser:
 
         values = self._parse_enumerator_list()
 
-        enum = EnumDecl(typename, values, base, doxygen, self._current_access)
+        enum = EnumDecl(typename, values, base, doxygen, self._current_access, hrefl)
         self.visitor.on_enum(self.state, enum)
 
         # Finish it up
-        self._finish_class_or_enum(enum.typename, is_typedef, mods, "enum")
+        self._finish_class_or_enum(enum.typename, is_typedef, mods, "enum", hrefl)
 
     def _parse_enumerator_list(self) -> typing.List[Enumerator]:
         """
@@ -1269,6 +1271,7 @@ class CxxParser:
         typedef: bool,
         location: Location,
         mods: ParsedTypeModifiers,
+        hrefl: typing.Optional[HReflType] = None,
     ) -> None:
         """
         class_specifier: class_head "{" [member_specification] "}"
@@ -1321,7 +1324,7 @@ class CxxParser:
             raise self._parse_error(tok, "{")
 
         clsdecl = ClassDecl(
-            typename, bases, template, explicit, final, doxygen, self._current_access
+            typename, bases, template, explicit, final, doxygen, self._current_access, hrefl
         )
         state: ClassBlockState = ClassBlockState(
             self.state, location, clsdecl, default_access, typedef, mods
@@ -1337,6 +1340,7 @@ class CxxParser:
             state.typedef,
             state.mods,
             state.class_decl.classkey,
+            state.class_decl.hrefl,
         )
 
     def _process_access_specifier(
@@ -1425,6 +1429,7 @@ class CxxParser:
         doxygen: typing.Optional[str],
         location: Location,
         is_typedef: bool,
+        hrefl: typing.Optional[HReflType] = None,
     ) -> None:
         state = self.state
         state.location = location
@@ -1499,6 +1504,8 @@ class CxxParser:
             if is_class_block:
                 access = self._current_access
                 assert access is not None
+                if hrefl is not None:
+                    props['hrefl'] = hrefl
 
                 f = Field(
                     name=name,
@@ -2054,6 +2061,7 @@ class CxxParser:
         is_typedef: bool,
         msvc_convention: typing.Optional[LexToken],
         is_guide: bool = False,
+        hrefl: typing.Optional[HReflType] = None,
     ) -> bool:
         """
         Assumes the caller has already consumed the return type and name, this consumes the
@@ -2107,6 +2115,7 @@ class CxxParser:
                 template=template,
                 operator=op,
                 access=self._current_access,
+                hrefl=hrefl,
                 **props,  # type: ignore
             )
 
@@ -2157,6 +2166,7 @@ class CxxParser:
                 doxygen=doxygen,
                 template=template,
                 operator=op,
+                hrefl=hrefl,
                 **props,
             )
             self._parse_fn_end(fn)
@@ -2457,6 +2467,7 @@ class CxxParser:
         template: TemplateDeclTypeVar,
         is_typedef: bool,
         is_friend: bool,
+        hrefl: typing.Optional[HReflType] = None,
     ) -> bool:
         toks = []
 
@@ -2562,6 +2573,7 @@ class CxxParser:
                 is_typedef,
                 msvc_convention,
                 is_guide,
+                hrefl,
             )
         elif msvc_convention:
             raise self._parse_error(msvc_convention)
@@ -2593,7 +2605,7 @@ class CxxParser:
         if isinstance(template, list):
             raise CxxParseError("multiple template declarations on a field")
 
-        self._parse_field(mods, dtype, pqname, template, doxygen, location, is_typedef)
+        self._parse_field(mods, dtype, pqname, template, doxygen, location, is_typedef, hrefl)
         return False
 
     def _parse_operator_conversion(
@@ -2604,6 +2616,7 @@ class CxxParser:
         template: TemplateDeclTypeVar,
         is_typedef: bool,
         is_friend: bool,
+        hrefl: typing.Optional[HReflType] = None,
     ) -> None:
         tok = self._next_token_must_be("operator")
 
@@ -2641,12 +2654,68 @@ class CxxParser:
             is_friend,
             False,
             None,
+            False,
+            hrefl,
         ):
             # has function body and handled it
             return
 
         # if this is just a declaration, next token should be ;
         self._next_token_must_be(";")
+    
+    _hrefl_keywords = {"HREFL", "HCLASS", "HFUNCTION", "HPROPERTY", "HENUM"}
+
+    def _parse_hrefl(
+        self,
+        tok: LexToken,
+    ) -> tuple[dict[str, Value] | None, LexToken]:
+        """
+        Parses a HREFL declaration
+        """
+
+        # HREFL declarations are of the form:
+        # HREFL(name=value, name=value, ...)
+
+        # first token should be hrefl
+        if not tok.type in self._hrefl_keywords:
+            return None, tok
+        
+        # next token should be (
+        if not self.lex.token_if("("):
+            raise self._parse_error(None)
+        
+        # next tokens is a sequence of name=value pairs
+        hrefl = {}
+
+        if self.lex.token_if(")"):
+            # empty hrefl
+            return hrefl, self.lex.token()
+
+        while True:
+            # first token is the name
+            tok = self.lex.token()
+
+            name = self._parse_pqname_name(tok.value)
+            
+            # next token is =
+            if not self.lex.token_if("="):
+                hrefl[name[0].name] = None
+            else:
+                # next token is the value
+                value_tknlist = self._consume_value_until([], ")", ",")
+                
+                # add to the dict
+                hrefl[name[0].name] = Value(value_tknlist)
+            
+            # next token is either , or )
+            if self.lex.token_if(","):
+                continue
+            elif self.lex.token_if(")"):
+                break
+            else:
+                raise self._parse_error(None)
+        
+        return hrefl, self.lex.token()
 
     _class_enum_stage2 = {":", "final", "explicit", "{"}
 
@@ -2667,6 +2736,8 @@ class CxxParser:
 
         location = tok.location
 
+        hrefl, tok = self._parse_hrefl(tok)
+
         # Almost always starts out with some kind of type name or a modifier
         parsed_type, mods = self._parse_type(tok, operator_ok=True)
 
@@ -2675,7 +2746,7 @@ class CxxParser:
             parsed_type is not None
             and parsed_type.typename.classkey
             and self._maybe_parse_class_enum_decl(
-                parsed_type, mods, doxygen, template, is_typedef, is_friend, location
+                parsed_type, mods, doxygen, template, is_typedef, is_friend, location, hrefl
             )
         ):
             return
@@ -2708,14 +2779,14 @@ class CxxParser:
         if parsed_type is None:
             # this means an operator was encountered, deal with the special case
             self._parse_operator_conversion(
-                mods, location, doxygen, template, is_typedef, is_friend
+                mods, location, doxygen, template, is_typedef, is_friend, hrefl
             )
             return
 
         # Ok, dealing with a variable or function/method
         while True:
             if self._parse_decl(
-                parsed_type, mods, location, doxygen, template, is_typedef, is_friend
+                parsed_type, mods, location, doxygen, template, is_typedef, is_friend, hrefl
             ):
                 # if it returns True then it handled the end of the statement
                 break
@@ -2743,6 +2814,7 @@ class CxxParser:
         is_typedef: bool,
         is_friend: bool,
         location: Location,
+        hrefl: typing.Optional[HReflType] = None,
     ) -> bool:
         # check for forward declaration or friend declaration
         if self.lex.token_if(";"):
@@ -2796,14 +2868,14 @@ class CxxParser:
 
             if typename.classkey in ("class", "struct", "union"):
                 self._parse_class_decl(
-                    typename, tok, doxygen, template, is_typedef, location, mods
+                    typename, tok, doxygen, template, is_typedef, location, mods, hrefl
                 )
             else:
                 if template:
                     # enum cannot have a template
                     raise self._parse_error(tok)
                 self._parse_enum_decl(
-                    typename, tok, doxygen, is_typedef, location, mods
+                    typename, tok, doxygen, is_typedef, location, mods, hrefl
                 )
 
             return True
@@ -2817,6 +2889,7 @@ class CxxParser:
         is_typedef: bool,
         mods: ParsedTypeModifiers,
         classkey: typing.Optional[str],
+        hrefl: typing.Optional[HReflType] = None,
     ) -> None:
         parsed_type = Type(name)
 
@@ -2840,6 +2913,7 @@ class CxxParser:
                     f = Field(
                         type=Type(name),
                         access=access,
+                        hrefl=hrefl,
                     )
                     self.visitor.on_class_field(class_state, f)
             return
@@ -2847,7 +2921,7 @@ class CxxParser:
         while True:
             location = self.lex.current_location()
             if self._parse_decl(
-                parsed_type, mods, location, None, None, is_typedef, False
+                parsed_type, mods, location, None, None, is_typedef, False, hrefl
             ):
                 # if it returns True then it handled the end of the statement
                 break
