@@ -153,12 +153,7 @@ class PlyLexer:
         "volatile",
         "wchar_t",
         "while",
-        "HREFL",
-        "HCLASS",
-        "HPROPERTY",
-        "HENUM",
-        "HFUNCTION",
-        "HSTRUCT"
+        "__hrefl"
     }
 
     tokens = [

@@ -1,12 +1,8 @@
 """
-Unit tests for Heath's HREFL
+Unit tests for Heath's __hrefl
 
 Tests:
-- HCLASS: for class/struct declarations
-- HFUNCTION: for function declarations  
-- HPROPERTY: for class member field declarations
-- HENUM: for enum declarations
-- HREFL: generic reflection annotation
+- __hrefl: unified reflection annotation for all declaration types
 """
 
 import pytest
@@ -43,12 +39,12 @@ class HReflTestVisitor(CxxVisitor):
 
 
 class TestHReflParsing:
-    """Test cases for HREFL functionality"""
+    """Test cases for __hrefl functionality"""
     
-    def test_hclass_parsing(self):
-        """Test that HCLASS annotations are parsed correctly for classes"""
+    def test_class_annotation_parsing(self):
+        """Test that __hrefl annotations are parsed correctly for classes"""
         content = """
-        HCLASS(class_prop=class_val, type=widget)
+        __hrefl(class_prop=class_val, type=widget)
         class TestClass {
         public:
             int member;
@@ -68,10 +64,10 @@ class TestHReflParsing:
         assert cls.hrefl["class_prop"].format() == "class_val"
         assert cls.hrefl["type"].format() == "widget"
     
-    def test_henum_parsing(self):
-        """Test that HENUM annotations are parsed correctly for enums"""
+    def test_enum_annotation_parsing(self):
+        """Test that __hrefl annotations are parsed correctly for enums"""
         content = """
-        HENUM(enum_prop=enum_val, serializable=true)
+        __hrefl(enum_prop=enum_val, serializable=true)
         enum TestEnum { A, B, C };
         """
         
@@ -88,10 +84,10 @@ class TestHReflParsing:
         assert enum.hrefl["enum_prop"].format() == "enum_val"
         assert enum.hrefl["serializable"].format() == "true"
     
-    def test_hfunction_parsing(self):
-        """Test that HFUNCTION annotations are parsed correctly for functions"""
+    def test_function_annotation_parsing(self):
+        """Test that __hrefl annotations are parsed correctly for functions"""
         content = """
-        HFUNCTION(func_prop=func_val, exported=true)
+        __hrefl(func_prop=func_val, exported=true)
         void test_function(int x);
         """
         
@@ -108,12 +104,12 @@ class TestHReflParsing:
         assert func.hrefl["func_prop"].format() == "func_val"
         assert func.hrefl["exported"].format() == "true"
     
-    def test_hproperty_parsing(self):
-        """Test that HPROPERTY annotations are parsed correctly for class fields"""
+    def test_field_annotation_parsing(self):
+        """Test that __hrefl annotations are parsed correctly for class fields"""
         content = """
         class TestClass {
         public:
-            HPROPERTY(field_prop=field_val, bindable=true)
+            __hrefl(field_prop=field_val, bindable=true)
             int member;
             
             int regular_member;
@@ -139,18 +135,18 @@ class TestHReflParsing:
         assert annotated_field is not None
         assert regular_field is not None
         
-        # Check annotated field has hrefl data
+        # Check annotated field has __hrefl data
         assert annotated_field.hrefl is not None
         assert "field_prop" in annotated_field.hrefl
         assert "bindable" in annotated_field.hrefl
         assert annotated_field.hrefl["field_prop"].format() == "field_val"
         assert annotated_field.hrefl["bindable"].format() == "true"
         
-        # Check regular field has no hrefl data
+        # Check regular field has no __hrefl data
         assert regular_field.hrefl is None
     
     def test_variable_no_hrefl(self):
-        """Test that global variables do not have hrefl attribute"""
+        """Test that global variables do not have __hrefl attribute"""
         content = """
         int global_var = 42;
         """
@@ -162,13 +158,13 @@ class TestHReflParsing:
         assert len(visitor.variables) == 1
         var = visitor.variables[0]
         
-        # Variables should not have hrefl attribute
-        assert not hasattr(var, 'hrefl')
+        # Variables should not have __hrefl attribute
+        assert not hasattr(var, '__hrefl')
     
     def test_empty_hrefl_annotation(self):
-        """Test empty HREFL annotations"""
+        """Test empty __hrefl annotations"""
         content = """
-        HCLASS()
+        __hrefl()
         class EmptyAnnotation {
         public:
             int member;
@@ -186,9 +182,9 @@ class TestHReflParsing:
         assert len(cls.hrefl) == 0
     
     def test_multiple_hrefl_properties(self):
-        """Test multiple properties in a single HREFL annotation"""
+        """Test multiple properties in a single __hrefl annotation"""
         content = """
-        HCLASS(prop1=val1, prop2=val2, prop3=val3, flag)
+        __hrefl(prop1=val1, prop2=val2, prop3=val3, flag)
         class MultiProps {
         };
         """
@@ -210,10 +206,10 @@ class TestHReflParsing:
     def test_mixed_annotated_and_regular_declarations(self):
         """Test that annotated and regular declarations coexist correctly"""
         content = """
-        HCLASS(annotated=true)
+        __hrefl(annotated=true)
         class AnnotatedClass {
         public:
-            HPROPERTY(special=field)
+            __hrefl(special=field)
             int annotated_member;
             
             int regular_member;
@@ -224,12 +220,12 @@ class TestHReflParsing:
             int member;
         };
         
-        HFUNCTION(api=public)
+        __hrefl(api=public)
         void annotated_function();
         
         void regular_function();
         
-        HENUM(values=important)
+        __hrefl(values=important)
         enum AnnotatedEnum { A, B };
         
         enum RegularEnum { X, Y };
@@ -291,27 +287,27 @@ class TestHReflParsing:
         assert regular_field2.hrefl is None
 
 
-class TestHReflKeywords:
-    """Test the different HREFL keywords"""
+class TestUnifiedHReflKeyword:
+    """Test the unified __hrefl keyword"""
     
-    def test_all_keywords_recognized(self):
-        """Test that all HREFL keywords are recognized by the parser"""
+    def test_unified_keyword_recognized(self):
+        """Test that the __hrefl keyword is recognized for all declaration types"""
         content = """
-        HREFL(generic=true)
+        __hrefl(generic=true)
         class GenericClass {};
         
-        HCLASS(class_specific=true)
+        __hrefl(class_specific=true)
         class ClassSpecific {};
         
-        HFUNCTION(func_specific=true)
+        __hrefl(func_specific=true)
         void func();
         
-        HENUM(enum_specific=true)
+        __hrefl(enum_specific=true)
         enum EnumSpecific { A };
         
         class Container {
         public:
-            HPROPERTY(property_specific=true)
+            __hrefl(property_specific=true)
             int field;
         };
         """
@@ -326,7 +322,7 @@ class TestHReflKeywords:
         assert len(visitor.enums) == 1
         assert len(visitor.fields) == 1
         
-        # Check that all have their respective hrefl data
+        # Check that all have their respective __hrefl data
         generic_class = next((c for c in visitor.classes if c.typename.format() == "class GenericClass"), None)
         class_specific = next((c for c in visitor.classes if c.typename.format() == "class ClassSpecific"), None)
         

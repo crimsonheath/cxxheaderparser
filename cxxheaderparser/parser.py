@@ -2663,20 +2663,20 @@ class CxxParser:
         # if this is just a declaration, next token should be ;
         self._next_token_must_be(";")
     
-    _hrefl_keywords = {"HREFL", "HCLASS", "HFUNCTION", "HPROPERTY", "HENUM"}
+    _hrefl_keywords = {"__hrefl"}
 
     def _parse_hrefl(
         self,
         tok: LexToken,
     ) -> tuple[dict[str, Value] | None, LexToken]:
         """
-        Parses a HREFL declaration
+        Parses a __hrefl declaration
         """
 
-        # HREFL declarations are of the form:
-        # HREFL(name=value, name=value, ...)
+        # __hrefl declarations are of the form:
+        # __hrefl(name=value, name=value, ...)
 
-        # first token should be hrefl
+        # first token should be __hrefl
         if not tok.type in self._hrefl_keywords:
             return None, tok
         
