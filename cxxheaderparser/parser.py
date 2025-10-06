@@ -454,11 +454,11 @@ class CxxParser:
                 tok = self._next_token_must_be("NAME")
 
         if inline and len(names) > 1:
-            raise CxxParseError("a nested namespace definition cannot be inline")
+            raise CxxParseError("a nested namespace definition cannot be inline", location=location)
 
         state = self.state
         if not isinstance(state, (NamespaceBlockState, ExternBlockState)):
-            raise CxxParseError("namespace cannot be defined in a class")
+            raise CxxParseError("namespace cannot be defined in a class", location=location)
 
         if ns_alias:
             alias = NamespaceAlias(ns_alias.value, names)
@@ -792,7 +792,7 @@ class CxxParser:
 
         state = self.state
         if isinstance(state, ClassBlockState):
-            raise CxxParseError("concept cannot be defined in a class")
+            raise CxxParseError("concept cannot be defined in a class", tok)
 
         self.visitor.on_concept(
             state,
@@ -908,7 +908,7 @@ class CxxParser:
         elif tok.type in self._attribute_specifier_seq_start_types:
             self._consume_attribute_specifier_seq(tok)
         else:
-            raise CxxParseError("internal error")
+            raise CxxParseError("internal error", tok)
 
     def _consume_gcc_attribute(
         self, tok: typing.Optional[LexToken], doxygen: typing.Optional[str] = None
@@ -1444,19 +1444,19 @@ class CxxParser:
 
         if not pqname:
             if is_typedef:
-                raise CxxParseError("empty name not allowed in typedef")
+                raise CxxParseError("empty name not allowed in typedef", location=location)
             if not is_class_block:
-                raise CxxParseError("variables must have names")
+                raise CxxParseError("variables must have names", location=location)
 
         else:
             last_segment = pqname.segments[-1]
             if not isinstance(last_segment, NameSpecifier):
-                raise CxxParseError(f"invalid name for variable: {pqname}")
+                raise CxxParseError(f"invalid name for variable: {pqname}", location=location)
 
             if is_typedef or is_class_block:
                 name = last_segment.name
                 if len(pqname.segments) > 1:
-                    raise CxxParseError(f"name cannot have multiple segments: {pqname}")
+                    raise CxxParseError(f"name cannot have multiple segments: {pqname}", location=location)
 
         # check for array
         tok = self.lex.token_if("[")
@@ -2174,28 +2174,28 @@ class CxxParser:
             if is_typedef:
                 if len(pqname.segments) != 1:
                     raise CxxParseError(
-                        "typedef name may not be a nested-name-specifier"
+                        "typedef name may not be a nested-name-specifier", location=location
                     )
                 name: typing.Optional[str] = getattr(pqname.segments[0], "name", None)
                 if not name:
-                    raise CxxParseError("typedef function must have a name")
+                    raise CxxParseError("typedef function must have a name", location=location)
 
                 if fn.constexpr:
-                    raise CxxParseError("typedef function may not be constexpr")
+                    raise CxxParseError("typedef function may not be constexpr", location=location)
                 if fn.extern:
-                    raise CxxParseError("typedef function may not be extern")
+                    raise CxxParseError("typedef function may not be extern", location=location)
                 if fn.static:
-                    raise CxxParseError("typedef function may not be static")
+                    raise CxxParseError("typedef function may not be static", location=location)
                 if fn.inline:
-                    raise CxxParseError("typedef function may not be inline")
+                    raise CxxParseError("typedef function may not be inline", location=location)
                 if fn.has_body:
-                    raise CxxParseError("typedef may not be a function definition")
+                    raise CxxParseError("typedef may not be a function definition", location=location)
                 if fn.template:
-                    raise CxxParseError("typedef function may not have a template")
+                    raise CxxParseError("typedef function may not have a template", location=location)
 
                 return_type = fn.return_type
                 if return_type is None:
-                    raise CxxParseError("typedef function must have return type")
+                    raise CxxParseError("typedef function must have return type", location=location)
 
                 fntype = FunctionType(
                     return_type,
@@ -2211,7 +2211,7 @@ class CxxParser:
                 return False
             else:
                 if not isinstance(state, (ExternBlockState, NamespaceBlockState)):
-                    raise CxxParseError("internal error")
+                    raise CxxParseError("internal error", location=location)
 
                 self.visitor.on_function(state, fn)
                 return fn.has_body or fn.has_trailing_return
@@ -2600,10 +2600,10 @@ class CxxParser:
             raise self._parse_error(None)
 
         if not dtype:
-            raise CxxParseError("appear to be parsing a field without a type")
+            raise CxxParseError("appear to be parsing a field without a type", location=location)
 
         if isinstance(template, list):
-            raise CxxParseError("multiple template declarations on a field")
+            raise CxxParseError("multiple template declarations on a field", location=location)
 
         self._parse_field(mods, dtype, pqname, template, doxygen, location, is_typedef, hrefl)
         return False
