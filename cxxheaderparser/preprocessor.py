@@ -137,7 +137,7 @@ def _msvc_filter(fp: typing.TextIO) -> str:
     assert first.startswith("#line")
     fname = first[first.find('"') :]
 
-    for line in fp:
+    for line in fp:       
         if line.startswith("#line"):
             keep = line.endswith(fname)
 
@@ -146,6 +146,16 @@ def _msvc_filter(fp: typing.TextIO) -> str:
 
     new_output.seek(0)
     return new_output.read()
+
+def _msvc_filter_stderr(fp: typing.TextIO) -> list[str]:
+    includes = []
+    for line in fp:
+        if line.startswith("Note: including file:"):
+            include_fname = line[len("Note: including file:") :].strip()
+            includes.append(include_fname)
+        else:
+            print(line, file=sys.stderr)
+    return includes
 
 
 def make_msvc_preprocessor(
@@ -156,6 +166,8 @@ def make_msvc_preprocessor(
     encoding: typing.Optional[str] = None,
     msvc_args: typing.List[str] = ["cl.exe"],
     print_cmd: bool = True,
+    depfile: typing.Optional[pathlib.Path] = None,
+    deptarget: typing.Optional[typing.List[str]] = None,
 ) -> PreprocessorFunction:
     """
     Creates a preprocessor function that uses cl.exe from Microsoft Visual Studio
@@ -187,6 +199,13 @@ def make_msvc_preprocessor(
     def _preprocess_file(filename: str, content: typing.Optional[str]) -> str:
         cmd = msvc_args + ["/nologo", "/E", "/C"]
 
+        if depfile is not None:
+            if deptarget is None:
+                raise PreprocessorError(
+                    "must specify deptarget if depfile is specified"
+                )
+            cmd.append("/showIncludes")
+
         for p in include_paths:
             cmd.append(f"/I{p}")
         for d in defines:
@@ -214,9 +233,28 @@ def make_msvc_preprocessor(
             if print_cmd:
                 print("+", " ".join(cmd), file=sys.stderr)
 
-            result: str = subprocess.check_output(cmd, **kwargs)  # type: ignore
+            cap = subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+            
+            if cap.returncode != 0:
+                raise PreprocessorError(
+                    f"cl.exe failed with exit code {cap.returncode}:\n{cap.stderr}"
+                )
+            
+            result = cap.stdout
             if not retain_all_content:
                 result = _msvc_filter(io.StringIO(result))
+            
+            includes = _msvc_filter_stderr(io.StringIO(cap.stderr))
+
+            if depfile is not None:
+                with open(depfile, "w") as dfp:
+                    target = " ".join(deptarget)
+                    dfp.write(f"{target}:")
+                    for inc in includes:
+                        inc = inc.replace("\\", "\\\\")
+                        inc = inc.replace(" ", "\\ ")
+                        dfp.write(f" \\\n  {inc}")
+                    dfp.write("\n")
         finally:
             if tfpname:
                 os.unlink(tfpname)
